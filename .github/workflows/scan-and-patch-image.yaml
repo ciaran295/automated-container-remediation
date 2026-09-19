@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan current image
-        uses: aquasecurity/trivy-action@<pin-a-version>
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE }}
           format: json
@@ -35,7 +35,7 @@ jobs:
       - name: Patch with Copa
         if: steps.check.outputs.count != '0'
         id: copa
-        uses: project-copacetic/copa-action@<pin-a-version>
+        uses: project-copacetic/copa-action@v1.2.1
         with:
           image: ${{ env.IMAGE }}
           image-report: trivy-report.json
@@ -43,7 +43,7 @@ jobs:
 
       - name: Re-scan patched image (gate)
         if: steps.check.outputs.count != '0'
-        uses: aquasecurity/trivy-action@<pin-a-version>
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.copa.outputs.patched-image }}
           vuln-type: os
