@@ -1,0 +1,58 @@
+name: scan-and-patch-image
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/vuln-nginx:latest
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan current image
+        uses: aquasecurity/trivy-action@<pin-a-version>
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: json
+          output: trivy-report.json
+          vuln-type: os
+          ignore-unfixed: true      # only report vulns that have a fix
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+
+      - name: Any fixable vulns?
+        id: check
+        run: |
+          n=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-report.json)
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+
+      - name: Patch with Copa
+        if: steps.check.outputs.count != '0'
+        id: copa
+        uses: project-copacetic/copa-action@<pin-a-version>
+        with:
+          image: ${{ env.IMAGE }}
+          image-report: trivy-report.json
+          patched-tag: patched
+
+      - name: Re-scan patched image (gate)
+        if: steps.check.outputs.count != '0'
+        uses: aquasecurity/trivy-action@<pin-a-version>
+        with:
+          image-ref: ${{ steps.copa.outputs.patched-image }}
+          vuln-type: os
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Log in and push patched image
+        if: steps.check.outputs.count != '0'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ${{ steps.copa.outputs.patched-image }}
