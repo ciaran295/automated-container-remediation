@@ -17,6 +17,13 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
+      - name: Log in to ghcr.io
+        uses: docker/login-action@<pin-a-version>
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN }}
+
       - name: Scan current image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
