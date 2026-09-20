@@ -42,6 +42,13 @@ jobs:
           n=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-report.json)
           echo "count=$n" >> "$GITHUB_OUTPUT"
 
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN }}
+
       - name: Patch with Copa
         if: steps.check.outputs.count != '0'
         id: copa
