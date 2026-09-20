@@ -45,7 +45,7 @@ jobs:
       - name: Patch with Copa
         if: steps.check.outputs.count != '0'
         id: copa
-        uses: project-copacetic/copa-action@@v1.2.1
+        uses: project-copacetic/copa-action@v1.2.1
         with:
           image: ${{ env.IMAGE }}
           image-report: trivy-report.json
