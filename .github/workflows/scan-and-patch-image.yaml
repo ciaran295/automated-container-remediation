@@ -42,6 +42,25 @@ jobs:
           n=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-report.json)
           echo "count=$n" >> "$GITHUB_OUTPUT"
 
+      # Use custom docker socket for buildkit
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v5
+        with:
+          daemon-config: |
+            {
+              "debug": true,
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
+      - name: Get socket path
+        run: |
+            url=$(docker context inspect | jq -r .[0].Endpoints.docker.Host)
+            socket_path=$(echo "$url" | awk -F// '{print $2}')
+            echo "$socket_path"
+            echo "SOCKET=$socket_path" >> $GITHUB_ENV
+
       - name: Patch with Copa
         if: steps.check.outputs.count != '0'
         id: copa
@@ -50,6 +69,7 @@ jobs:
           image: ${{ env.IMAGE }}
           image-report: trivy-report.json
           patched-tag: patched
+          custom-socket: ${{ env.SOCKET }}
 
       - name: Re-scan patched image (gate)
         if: steps.check.outputs.count != '0'
