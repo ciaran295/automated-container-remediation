@@ -1,4 +1,4 @@
-Automated Container Remediation with Github Actions
+Learn Automated Container Remediation with Github Actions
 
 ### Local
 
