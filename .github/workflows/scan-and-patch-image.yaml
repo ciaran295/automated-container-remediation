@@ -41,6 +41,14 @@ jobs:
         run: |
           n=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-report.json)
           echo "count=$n" >> "$GITHUB_OUTPUT"
+      
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ github.run_number }}
+          path: trivy-report.json
+          retention-days: 90
 
       # Use custom docker socket for buildkit
       - name: Set up Docker
