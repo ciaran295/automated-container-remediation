@@ -94,3 +94,36 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           docker push ${{ steps.copa.outputs.patched-image }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+ 
+      - name: Sign the patched image (keyless)
+        run: |
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ env.DIGEST }}
+          COSIGN_EXPERIMENTAL: "1"   # enables keyless signing via Fulcio/Rekor
+
+      - name: Generate SLSA build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          push-to-registry: true
+ 
+ 
+      - name: Attach vulnerability scan as attestation
+        uses: actions/attest-sbom@v1   # or a custom predicate via cosign attest
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          sbom-path: trivy-report.json   # adjust to wherever your re-scan writes output
+          push-to-registry: true
+ 
+      - name: Verify signature (sanity check in CI)
+        run: |
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
