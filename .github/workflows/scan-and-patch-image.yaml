@@ -78,6 +78,37 @@ jobs:
           image-report: trivy-report.json
           patched-tag: patched
           custom-socket: ${{ env.SOCKET }}
+      
+      - name: Log in and push patched image
+        if: steps.check.outputs.count != '0'
+        env:
+          PATCHED_IMAGE: ${{ steps.copa.outputs.patched-image }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" |
+            docker login ghcr.io \
+              --username "${{ github.actor }}" \
+              --password-stdin
+
+          docker push "$PATCHED_IMAGE"
+
+      - name: Resolve pushed image digest
+        id: image
+        if: steps.check.outputs.count != '0'
+        env:
+          PATCHED_IMAGE: ${{ steps.copa.outputs.patched-image }}
+        run: |
+          digest="$(docker buildx imagetools inspect "$PATCHED_IMAGE" \
+            --format '{{.Manifest.Digest}}')"
+
+          if [[ -z "$digest" || "$digest" != sha256:* ]]; then
+            echo "Could not resolve an immutable image digest"
+            exit 1
+          fi
+
+          image_name="${PATCHED_IMAGE%%:*}"
+
+          echo "name=$image_name" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Re-scan patched image (gate)
         if: steps.check.outputs.count != '0'
@@ -100,28 +131,35 @@ jobs:
  
       - name: Sign the patched image (keyless)
         run: |
-          cosign sign --yes "${{ steps.copa.outputs.patched-image }}"
+          cosign sign --yes "${IMAGE_NAME}@${IMAGE_DIGEST}"
         env:
           COSIGN_EXPERIMENTAL: "1"   # enables keyless signing via Fulcio/Rekor
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
 
       - name: Generate SLSA build provenance
+        if: steps.check.outputs.count != '0'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ steps.copa.outputs.patched-image }}
-          subject-digest: ${{ steps.copa.outputs.patched-image-digest }}
+          subject-name: ${{ steps.image.outputs.patched-image }}
+          subject-digest: ${{ steps.image.outputs.patched-image-digest }}
           push-to-registry: true
  
  
       - name: Attach vulnerability scan as attestation
         uses: actions/attest-sbom@v1   # or a custom predicate via cosign attest
         with:
-          subject-name: ${{ steps.copa.outputs.patched-image }}
-          subject-digest: ${{ steps.copa.outputs.patched-image-digest }}
+          subject-name: ${{ steps.image.outputs.patched-image }}
+          subject-digest: ${{ steps.image.outputs.patched-image-digest }}
           sbom-path: trivy-report.json   # adjust to wherever your re-scan writes output
           push-to-registry: true
  
       - name: Verify signature (sanity check in CI)
+        if: steps.check.outputs.count != '0'
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
-          cosign verify "${{ steps.copa.outputs.patched-image }}" \
+          cosign verify "${{ steps.image.outputs.patched-image }}" \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
