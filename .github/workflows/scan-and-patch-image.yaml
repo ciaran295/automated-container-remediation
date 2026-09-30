@@ -116,9 +116,19 @@ jobs:
         with:
           image-ref: ${{ steps.copa.outputs.patched-image }}
           vuln-type: os
+          format: 'spdx-json'
+          output: trivy-patched-report.json
           ignore-unfixed: true
           severity: CRITICAL,HIGH
           exit-code: '1'
+      
+      - name: Upload Patched Trivy report
+        if: steps.check.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-patched-${{ github.run_number }}
+          path: trivy-patched-report.json
+          retention-days: 90
 
       - name: Log in and push patched image
         if: steps.check.outputs.count != '0'
@@ -144,14 +154,13 @@ jobs:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
- 
- 
+
       - name: Attach vulnerability scan as attestation
         uses: actions/attest-sbom@v1   # or a custom predicate via cosign attest
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.image.outputs.digest }}
-          sbom-path: trivy-report.json   # adjust to wherever your re-scan writes output
+          sbom-path: trivy-patched-report.json   # adjust to wherever your re-scan writes output
           push-to-registry: true
  
       - name: Verify signature (sanity check in CI)
